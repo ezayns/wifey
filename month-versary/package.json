@@ -1,16 +1,16 @@
+
 {
-  "homepage": "https://ezayns.github.io/wifey",
   "name": "month-versary",
-  "private": true,
+  "homepage": "https://ezayns.github.io/wifey",
   "version": "0.0.0",
-  "type": "module",
+  "private": true,
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "lint": "eslint .",
     "preview": "vite preview",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist"
+
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",
