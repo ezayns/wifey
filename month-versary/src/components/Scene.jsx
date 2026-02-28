@@ -1,5 +1,5 @@
 import { useRef, useMemo, useState, useEffect } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import { Points, PointMaterial, Text } from "@react-three/drei";
 import * as THREE from "three";
 import {
@@ -15,6 +15,8 @@ import {
 const PARTICLE_COUNT = 1500;
 
 export default function Scene() {
+  const { camera, size } = useThree();
+
   const pointsRef = useRef();
   const audioRef = useRef();
 
@@ -23,36 +25,61 @@ export default function Scene() {
   const [targetPositions, setTargetPositions] = useState(null);
   const [showMyText, setShowMyText] = useState(true);
 
-  const [typedLine1, setTypedLine1] = useState("");
-  const [typedLine2, setTypedLine2] = useState("");
+  const [phaseText, setPhaseText] = useState("");
+  const [typedFinal1, setTypedFinal1] = useState("");
+  const [typedFinal2, setTypedFinal2] = useState("");
 
   const [fadeOpacity, setFadeOpacity] = useState(0);
   const [introPulse, setIntroPulse] = useState(1);
 
-  const currentPosRef = useRef(useMemo(() => {
-    const positions = new Float32Array(PARTICLE_COUNT * 3);
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
-      positions[i * 3] = (Math.random() - 0.5) * 8;
-      positions[i * 3 + 1] = (Math.random() - 0.5) * 8;
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 8;
-    }
-    return positions;
-  }, []));
+  const isMobile = size.width < 768;
 
+  /* =========================
+     RESPONSIVE CAMERA
+  ==========================*/
+  useEffect(() => {
+    camera.position.z = isMobile ? 10 : 8;
+  }, [isMobile, camera]);
+
+  /* =========================
+     INITIAL PARTICLE CLOUD
+  ==========================*/
+  const initialPositions = useMemo(() => {
+    const arr = new Float32Array(PARTICLE_COUNT * 3);
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      arr[i * 3] = (Math.random() - 0.5) * 8;
+      arr[i * 3 + 1] = (Math.random() - 0.5) * 8;
+      arr[i * 3 + 2] = (Math.random() - 0.5) * 8;
+    }
+    return arr;
+  }, []);
+
+  const currentPosRef = useRef(initialPositions);
   const velocityRef = useRef(new Float32Array(PARTICLE_COUNT * 3));
 
-  const colors = useMemo(() => ({
-    crownShape: "#ffcc00",
+  const colors = {
+    crown: "#ffcc00",
     heart: "#ff4d6d",
     tree: "#2ecc71",
     rose: "#ff1493",
     stars: "#f1c40f",
     explosion: "#ffaa00",
     rain: "#3498db"
-  }), []);
+  };
 
   /* =========================
-     INTRO ANIMATION
+     PHASE MESSAGES
+  ==========================*/
+  const phaseMessages = [
+    "Hello My Queen", // phase 0
+    "My Heart",       // phase 1
+    "My Peace",       // phase 2
+    "My Flower",      // phase 3
+    "My World"        // phase 4
+  ];
+
+  /* =========================
+     INTRO PULSE
   ==========================*/
   useFrame(({ clock }) => {
     if (!started) {
@@ -62,19 +89,16 @@ export default function Scene() {
   });
 
   /* =========================
-     HANDLE START CLICK + AUDIO
+     START AUDIO ON CLICK
   ==========================*/
-  const handleStart = () => {
-    setStarted(true);
-
+  useEffect(() => {
+    if (!started) return;
     if (!audioRef.current) {
-      audioRef.current = new Audio("/music/myTech.mp3"); // put your file in public/music/
-      audioRef.current.loop = true; // loop background music
-      audioRef.current.play().catch((err) => {
-        console.log("Audio play blocked (user interaction needed):", err);
-      });
+      audioRef.current = new Audio("/Slower.mp3"); // make sure Slower.mp3 is in public/
+      audioRef.current.loop = true;
+      audioRef.current.play().catch(e => console.log("Audio blocked:", e));
     }
-  };
+  }, [started]);
 
   /* =========================
      TIMELINE
@@ -83,30 +107,39 @@ export default function Scene() {
     if (!started) return;
 
     const timeline = [
-      { time: 0, phase: 0, positions: generateCrownShape(), color: colors.crownShape },
-      { time: 4000, phase: 1, positions: generateHeart(), color: colors.heart },
-      { time: 9000, phase: 2, positions: generateTree(), color: colors.tree },
-      { time: 14000, phase: 3, positions: generateRose(), color: colors.rose },
-      { time: 19000, phase: 4, positions: generateStars(), color: colors.stars },
-
-      { time: 24000, phase: 5, positions: generateExplosion(), color: colors.explosion },
-      { time: 29000, phase: 6, positions: generateRainFromCurrent(currentPosRef.current), color: colors.rain },
-      { time: 34000, phase: 7, positions: null, color: null }
+      { time: 0, phase: 0, pos: generateCrownShape(), color: colors.crown },
+      { time: 4000, phase: 1, pos: generateHeart(), color: colors.heart },
+      { time: 9000, phase: 2, pos: generateTree(), color: colors.tree },
+      { time: 14000, phase: 3, pos: generateRose(), color: colors.rose },
+      { time: 19000, phase: 4, pos: generateStars(), color: colors.stars },
+      { time: 24000, phase: 5, pos: generateExplosion(), color: colors.explosion },
+      { time: 29000, phase: 6, pos: generateRainFromCurrent(currentPosRef.current), color: colors.rain },
+      { time: 34000, phase: 7, pos: null, color: null }
     ];
 
-    const timeouts = timeline.map(({ time, phase, positions, color }) =>
+    const timers = timeline.map(item =>
       setTimeout(() => {
-        setPhase(phase);
-        setTargetPositions(positions);
+        setPhase(item.phase);
+        setTargetPositions(item.pos);
 
-        if (phase === 5) setShowMyText(false);
+        // PHASE 0–4 TEXT
+        if (item.phase >= 0 && item.phase <= 4) {
+          setPhaseText(phaseMessages[item.phase]);
+        }
 
-        if (pointsRef.current && color)
-          pointsRef.current.material.color.set(color);
-      }, time)
+        // PHASE 5: hide emoji & text
+        if (item.phase === 5) {
+          setShowMyText(false);
+          setPhaseText("");
+        }
+
+        if (pointsRef.current && item.color) {
+          pointsRef.current.material.color.set(item.color);
+        }
+      }, item.time)
     );
 
-    return () => timeouts.forEach(clearTimeout);
+    return () => timers.forEach(clearTimeout);
   }, [started]);
 
   /* =========================
@@ -114,6 +147,7 @@ export default function Scene() {
   ==========================*/
   useFrame(() => {
     if (!pointsRef.current || !targetPositions) return;
+
     const positions = pointsRef.current.geometry.attributes.position.array;
     const velocities = velocityRef.current;
 
@@ -134,7 +168,7 @@ export default function Scene() {
   });
 
   /* =========================
-     TYPEWRITER EFFECT
+     FINAL TYPEWRITER & CINEMATIC FADE
   ==========================*/
   useEffect(() => {
     if (phase !== 7) return;
@@ -143,18 +177,19 @@ export default function Scene() {
     const line2 = "I LOVE YOU";
 
     let i = 0;
-
-    const interval1 = setInterval(() => {
-      setTypedLine1(line1.slice(0, i + 1));
+    const int1 = setInterval(() => {
+      setTypedFinal1(line1.slice(0, i + 1));
       i++;
       if (i >= line1.length) {
-        clearInterval(interval1);
-
+        clearInterval(int1);
         let j = 0;
-        const interval2 = setInterval(() => {
-          setTypedLine2(line2.slice(0, j + 1));
+        const int2 = setInterval(() => {
+          setTypedFinal2(line2.slice(0, j + 1));
           j++;
-          if (j >= line2.length) clearInterval(interval2);
+          if (j >= line2.length) {
+            clearInterval(int2);
+            setTimeout(() => setFadeOpacity(1), 1500);
+          }
         }, 100);
       }
     }, 100);
@@ -166,18 +201,11 @@ export default function Scene() {
       <ambientLight intensity={0.5} />
       <pointLight position={[10, 10, 10]} intensity={0.5} />
 
-      {/* INTRO SCREEN */}
       {!started && (
-        <mesh onClick={handleStart}>
+        <mesh onClick={() => setStarted(true)}>
           <planeGeometry args={[20, 20]} />
           <meshBasicMaterial color="black" />
-          <Text
-            position={[0, 0, 0.1]}
-            fontSize={1.2 * introPulse}
-            color="#ffffff"
-            anchorX="center"
-            anchorY="middle"
-          >
+          <Text fontSize={1.2 * introPulse} color="white">
             WELCOME
           </Text>
         </mesh>
@@ -187,9 +215,7 @@ export default function Scene() {
         <Points ref={pointsRef} positions={currentPosRef.current}>
           <PointMaterial
             transparent
-            color={colors.crownShape}
-            size={0.035}
-            sizeAttenuation
+            size={isMobile ? 0.03 : 0.04}
             depthWrite={false}
             blending={THREE.AdditiveBlending}
           />
@@ -197,29 +223,28 @@ export default function Scene() {
       )}
 
       {started && showMyText && (
-        <Text
-          position={[0, 5, 0]}
-          fontSize={1}
-          color="#ffcc00"
-          anchorX="center"
-          anchorY="middle"
-        >
-          MY
+        <Text position={[0, 5, 0]} fontSize={isMobile ? 0.8 : 1} color="#ffcc00">
+          😘
+        </Text>
+      )}
+
+      {started && phaseText && (
+        <Text position={[0, -4, 0]} fontSize={isMobile ? 0.6 : 0.8} color="white">
+          {phaseText}
         </Text>
       )}
 
       {started && phase === 7 && (
         <>
-          <Text position={[0, 1, 0]} fontSize={0.8} color="#ff69b4" anchorX="center" anchorY="middle">
-            {typedLine1}
+          <Text position={[0, 1, 0]} fontSize={isMobile ? 0.6 : 0.8} color="#ff69b4">
+            {typedFinal1}
           </Text>
-          <Text position={[0, 0, 0]} fontSize={0.8} color="#ff69b4" anchorX="center" anchorY="middle">
-            {typedLine2}
+          <Text position={[0, 0, 0]} fontSize={isMobile ? 0.6 : 0.8} color="#ff69b4">
+            {typedFinal2}
           </Text>
         </>
       )}
 
-      {/* CINEMATIC FADE TO BLACK */}
       {fadeOpacity > 0 && (
         <mesh>
           <planeGeometry args={[20, 20]} />
